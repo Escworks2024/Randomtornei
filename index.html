@@ -55,7 +55,7 @@
             width: 100%;
         }
         .player-left {
-            background-color: green; /* Invertito */
+            background-color: green;
             color: white;
             padding: 5px;
             border-radius: 4px;
@@ -64,7 +64,7 @@
             text-align: center;
         }
         .player-right {
-            background-color: red; /* Invertito */
+            background-color: red;
             color: white;
             padding: 5px;
             border-radius: 4px;
@@ -110,7 +110,7 @@
 </head>
 <body>
     <h1>Gestore Campionati Avanzato</h1>
-    
+
     <div id="setup">
         <textarea id="namesInput" rows="5" placeholder="Inserisci i nomi dei giocatori separati da virgola"></textarea>
         <input type="number" id="numChampionships" placeholder="Numero di campionati">
@@ -119,6 +119,8 @@
             <option value="knockout">Eliminazione diretta</option>
         </select>
         <button onclick="createChampionships()">Crea Campionati</button>
+        <button onclick="downloadCSV()">Scarica CSV</button>
+        <input type="file" id="uploadCSV" accept=".csv" onchange="uploadCSV(event)">
     </div>
 
     <div id="championships"></div>
@@ -150,7 +152,6 @@
                 standings: []
             }));
 
-            // Distribuisce i giocatori nei campionati
             names.forEach((name, index) => {
                 championshipsData[index % numChampionships].players.push({
                     name: name,
@@ -159,7 +160,6 @@
                 });
             });
 
-            // Genera le partite in base al tipo di torneo
             championshipsData.forEach(championship => {
                 championship.matches = tournamentType === 'roundRobin' 
                     ? generateRoundRobinMatches(championship.players)
@@ -181,7 +181,6 @@
                     });
                 }
             }
-            // Mescola gli incontri per evitare ripetizioni consecutive di uno stesso giocatore
             shuffleArray(matches);
             return matches;
         }
@@ -191,7 +190,6 @@
             const shuffledPlayers = [...players];
             shuffleArray(shuffledPlayers);
 
-            // Se il numero di giocatori non è una potenza di 2, aggiungi bye
             while (shuffledPlayers.length & (shuffledPlayers.length - 1)) {
                 shuffledPlayers.push({ name: 'Bye', isBye: true });
             }
@@ -203,8 +201,6 @@
                     winner: shuffledPlayers[i + 1].isBye ? shuffledPlayers[i].name : null
                 });
             }
-
-            // Mescola gli incontri per distribuire meglio le partite
             shuffleArray(matches);
             return matches;
         }
@@ -286,6 +282,76 @@
             const match = championship.matches[matchIndex];
             match.winner = winner;
             updateStandings(championship);
+            displayChampionships();
+        }
+
+        function downloadCSV() {
+            let csvContent = "data:text/csv;charset=utf-8,";
+            championshipsData.forEach((champ, index) => {
+                csvContent += `Campionato ${index + 1}\n`;
+                csvContent += "Giocatore,Punti,Partite\n";
+                champ.standings.forEach(player => {
+                    csvContent += `${player.name},${player.points},${player.matchesPlayed}\n`;
+                });
+                csvContent += "\nPartite\n";
+                csvContent += "Giocatore1,Giocatore2,Vincitore\n";
+                champ.matches.forEach(match => {
+                    csvContent += `${match.player1},${match.player2},${match.winner || ''}\n`;
+                });
+                csvContent += "\n";
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "campionati.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function uploadCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                parseCSV(text);
+            };
+            reader.readAsText(file);
+        }
+
+        function parseCSV(csvText) {
+            const rows = csvText.split("\n");
+            let championshipIndex = -1;
+            let currentChampionship = null;
+            let section = "";
+
+            rows.forEach(row => {
+                const columns = row.split(",");
+                if (columns[0].startsWith("Campionato")) {
+                    championshipIndex++;
+                    championshipsData[championshipIndex] = { players: [], standings: [], matches: [] };
+                    currentChampionship = championshipsData[championshipIndex];
+                    section = "standings";
+                } else if (columns[0] === "Partite") {
+                    section = "matches";
+                } else if (columns.length === 3 && section === "standings" && columns[0] !== "Giocatore") {
+                    currentChampionship.standings.push({
+                        name: columns[0],
+                        points: parseInt(columns[1]),
+                        matchesPlayed: parseInt(columns[2])
+                    });
+                } else if (columns.length === 3 && section === "matches" && columns[0] !== "Giocatore1") {
+                    currentChampionship.matches.push({
+                        player1: columns[0],
+                        player2: columns[1],
+                        winner: columns[2] || null
+                    });
+                }
+            });
+
             displayChampionships();
         }
     </script>
